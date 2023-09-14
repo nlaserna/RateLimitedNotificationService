@@ -19,7 +19,7 @@ class NotificationServiceImpl implements NotificationService {
 
     @Override
     public void send(String type, String userId, String message) {
-        int maxAllowed = getMaxAllowed(type); // Get the maximum allowed notifications for the given type
+        int maxAllowed = getMaxAllowed(type); 
         Queue<Notification> userQueue = rateLimits.computeIfAbsent(type, k -> new LinkedList<>());
 
         // Removes notifications older than the rate limit window
