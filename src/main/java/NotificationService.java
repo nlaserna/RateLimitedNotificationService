@@ -1,30 +1,14 @@
 import java.io.*;
 import java.util.*;
 
-
-
-class Solution {
-    public static void main(String[] args) {
-
-        NotificationServiceImpl service = new NotificationServiceImpl(new Gateway());
-        service.send("news", "user", "news 1");
-        service.send("news", "user", "news 2");
-        service.send("news", "user", "news 3");
-        service.send("news", "another user", "news 1");
-        service.send("update", "user", "update 1");
-
-    }
-
-}
-
-
 interface NotificationService {
     void send(String type, String userId, String message);
 }
 
-
 class NotificationServiceImpl implements NotificationService {
-
+    long statusLimit = 60_000; // 1 min
+    long newsLimit = 86_400_000; // 1 day
+    long marketingLimit = 3_600_000; // 1 hour
     private Gateway gateway;
     private Map<String, Queue<Notification>> rateLimits;
 
@@ -35,25 +19,52 @@ class NotificationServiceImpl implements NotificationService {
 
     @Override
     public void send(String type, String userId, String message) {
+        int maxAllowed = getMaxAllowed(type); // Get the maximum allowed notifications for the given type
+        Queue<Notification> userQueue = rateLimits.computeIfAbsent(type, k -> new LinkedList<>());
 
+        // Removes notifications older than the rate limit window
+        long currentTime = System.currentTimeMillis();
+        while (!userQueue.isEmpty() && currentTime - userQueue.peek().timestamp >= getRateLimitInterval(type)) {
+            userQueue.poll();
+        }
+
+        if (userQueue.size() < maxAllowed) {
+            gateway.send(userId, message);
+            userQueue.offer(new Notification(currentTime));
+        } else {
+            System.out.println("Rate limit exceeded for user " + userId + " and type " + type);
+        }
 
     }
 
-    private static class Notification {
-        private final long timestamp;
-
-        public Notification(long timestamp) {
-            this.timestamp = timestamp;
+    private long getRateLimitInterval(String type) {
+        switch (type) {
+            case "status":
+               return statusLimit;
+            case "news":
+                return newsLimit;
+            case "marketing":
+                return marketingLimit;
+            default:
+                return Long.MAX_VALUE; // Default rate limit interval (no limit)
         }
     }
-}
 
-
-class Gateway {
-
-    /* already implemented */
-    void send(String userId, String message) {
-        System.out.println("sending message to user " + userId);
+    private int getMaxAllowed(String type) {
+        switch (type) {
+            case "status":
+                return 2; // not more than 2 per minute
+            case "news":
+                return 1; // not more than 1 per day
+            case "marketing":
+                return 3; // not more than 3 per hour
+            default:
+                return 0; // Default rate limit
+        }
     }
 
+
 }
+
+
+
